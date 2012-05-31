@@ -97,7 +97,11 @@ class  ThinkTemplate extends Think
         // 模板阵列变量分解成为独立变量
         extract($templateVar, EXTR_OVERWRITE);
         //载入模版缓存文件
-        include $templateCacheFile;
+        $mmc=memcache_init();
+		if($mmc==false) exit( "mc init failed\n" );
+		$content = memcache_get($mmc,$templateCacheFile);
+		eval(' ?>' . $content);
+		//include $templateCacheFile;
     }
 
     /**
@@ -128,18 +132,25 @@ class  ThinkTemplate extends Think
         $tmplCacheFile = $this->config['cache_path'].md5($tmplTemplateFile).$this->config['cache_suffix'];
         $tmplContent = '';
         // 检查Cache文件是否需要更新
-        if (!$this->checkCache($tmplTemplateFile)) {
+        if (!$this->SaeCheckCache($tmplTemplateFile)) {
             // 需要更新模版 读出原模板内容
             $tmplContent = file_get_contents($tmplTemplateFile);
             //编译模板内容
             $tmplContent = $this->compiler($tmplContent);
             // 检测分组目录
-            if(!is_dir($this->config['cache_path']))
-                mk_dir($this->config['cache_path']);
+            //if(!is_dir($this->config['cache_path']))
+            //    mk_dir($this->config['cache_path']);
             //重写Cache文件
-            if( false === file_put_contents($tmplCacheFile,trim($tmplContent)))
-                throw_exception(L('_CACHE_WRITE_ERROR_'));
-        }
+            $mmc=memcache_init();
+			if($mmc==false) exit( "mc init failed\n" );
+			memcache_set($mmc,$tmplCacheFile,trim($tmplContent));
+	        // 删除缓存
+			//SaeMC::set($tmplCacheFile,trim($tmplContent));
+			//var_dump(strlen(SaeMC::getValue($tmplCacheFile)));
+			//if( false === file_put_contents($tmplCacheFile,trim($tmplContent)))
+            //    throw_exception(L('_CACHE_WRITE_ERROR_'));
+			//SaeMC::set($tmplCacheFile,trim($tmplContent);
+		}
         return $tmplCacheFile;
     }
 
@@ -197,6 +208,23 @@ class  ThinkTemplate extends Think
             // 模板文件如果有更新则缓存需要更新
             return false;
         }elseif ($this->config['cache_time'] != -1 && time() > filemtime($tmplCacheFile)+$this->config['cache_time']) {
+            // 缓存是否在有效期
+            return false;
+        }
+        //缓存有效
+        return true;
+    }
+
+    protected function SaeCheckCache($tmplTemplateFile) {
+        if (!$this->config['tmpl_cache']) // 优先对配置检测
+            return false;
+        $tmplCacheFile = $this->config['cache_path'].md5($tmplTemplateFile).$this->config['cache_suffix'];
+        if(!SaeMC::file_exists($tmplCacheFile)){
+			return false;
+        }elseif (filemtime($tmplTemplateFile) > SaeMC::filemtime($tmplCacheFile)) {
+            // 模板文件如果有更新则缓存需要更新
+            return false;
+        }elseif ($this->config['cache_time'] != -1 && time() > SaeMC::filemtime($tmplCacheFile)+$this->config['cache_time']) {
             // 缓存是否在有效期
             return false;
         }

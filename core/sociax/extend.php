@@ -1001,8 +1001,8 @@ function friendlyDate($sTime,$type = 'normal',$alt = 'false') {
 	//sTime=源时间，cTime=当前时间，dTime=时间差
 	$cTime		=	time();
 	$dTime		=	$cTime - $sTime;
-	$dDay		=	intval(date("z",$cTime)) - intval(date("z",$sTime));
-	//$dDay		=	intval($dTime/3600/24);
+	//$dDay		=	intval(date("Ymd",$cTime)) - intval(date("Ymd",$sTime));
+	$dDay		=	$dTime/3600/24;
 	$dYear		=	intval(date("Y",$cTime)) - intval(date("Y",$sTime));
 	//normal：n秒前，n分钟前，n小时前，日期
 	if($type=='normal'){
@@ -1010,8 +1010,7 @@ function friendlyDate($sTime,$type = 'normal',$alt = 'false') {
 			return $dTime."秒前";
 		}elseif( $dTime < 3600 ){
 			return intval($dTime/60)."分钟前";
-		//今天的数据.年份相同.日期相同.
-		}elseif( $dYear==0 && $dDay == 0  ){
+		}elseif( $dTime >= 3600 && $dDay == 0  ){
 			//return intval($dTime/3600)."小时前";
 			return '今天'.date('H:i',$sTime);
 		}elseif($dYear==0){
@@ -1316,6 +1315,7 @@ function isBlackList($uid, $fid) {
 		return THEME_URL."/images/user_pic_$type.gif";
 	}
 }*/
+
 function getUserFace($uid,$size){
 	$size = ($size)?$size:'m';
 	if($size=='m'){
@@ -1325,12 +1325,22 @@ function getUserFace($uid,$size){
 	}else{
 		$type = 'big';
 	}
-	$uid_to_path = convertUidToPath($uid);
-	$userface = SITE_PATH.'/data/uploads/avatar' . $uid_to_path . '/' . $type. '.jpg';
-	if(is_file($userface)){
-		return SITE_URL.'/data/uploads/avatar' . $uid_to_path . '/' . $type . '.jpg';
+
+	if(C('TS_STORAGE_TYPE')=='SAEST'){
+		$userface = UPLOAD_URL.'/avatar-' . $uid . '-' . $type. '.jpg';
+		$s = new SaeStorage();
+		if($s->fileExists(C('TS_STORAGE_DOMAIN'), 'avatar-' . $uid . '-' . $type. '.jpg')){
+			return UPLOAD_URL.'/avatar-' . $uid . '-' . $type . '.jpg';
+		}else{
+			return THEME_URL."/images/user_pic_{$type}.gif";
+		}
 	}else{
-		return THEME_URL."/images/user_pic_{$type}.gif";
+		$userface = SITE_PATH.'/data/uploads/avatar/'.$uid.'/'.$type.'.jpg';
+		if(is_file($userface)){
+			return SITE_URL.'/data/uploads/avatar/'.$uid.'/'.$type.'.jpg';
+		}else{
+			return THEME_URL."/images/user_pic_$type.gif";
+		}
 	}
 }
 
@@ -2031,7 +2041,7 @@ function checkKeyWord( $content ){
  */
 function format($content,$url=false){
 	if($url){
-		$content = preg_replace('/((?:https?|ftp):\/\/(?:www\.)?(?:[a-zA-Z0-9][a-zA-Z0-9\-]*\.)?[a-zA-Z0-9][a-zA-Z0-9\-]*(?:\.[a-zA-Z0-9]+)+(?:\:[0-9]*)?(?:\/[^\x{4e00}-\x{9fa5}\s<\'\"“”‘’]*)?)/u', '<a href="\1" target="_blank">\1</a>\2', $content);
+		$content = preg_replace('/((?:https?|ftp):\/\/(?:www\.)?(?:[a-zA-Z0-9][a-zA-Z0-9\-]*\.)?[a-zA-Z0-9][a-zA-Z0-9\-]*(?:\.[a-zA-Z]+)+(?:\:[0-9]*)?(?:\/[^\x{4e00}-\x{9fa5}\s<\'\"“”‘’]*)?)/u', '<a href="\1" target="_blank">\1</a>\2', $content);
 	}
     $content = preg_replace_callback("/(?:#[^#]*[^#^\s][^#]*#|(\[.+?\]))/is",replaceEmot,$content);
 	$content = preg_replace_callback("/#([^#]*[^#^\s][^#]*)#/is",themeformat,$content);
@@ -2167,11 +2177,9 @@ function setOnline($uid) {
 	$now         = time();
 	$expire      = 5 * 60; // 有效期: 5min
 	if ($cookie_time < ($now - $expire)) {
-		//删除7天前登录的用户
-		//M('')->execute('DELETE FROM ' . C('DB_PREFIX') . 'user_online where ctime<'.($now-3600*24*7));
 		cookie($cookie_name, $now, $expire);
 		$sql = 'REPLACE INTO ' . C('DB_PREFIX') . 'user_online (`uid`,`ctime`) VALUES ("' . $uid . '", "' . $now . '")';
-	    return M('')->execute($sql);
+	    return M('')->query($sql);
 	} else {
 		return null;
 	}
@@ -2184,7 +2192,7 @@ function setOnline($uid) {
  */
 function getOnlineUserCount() {
 	$time = time() - 15 * 60;
-    $sql = "SELECT COUNT(*) AS count FROM " . C('DB_PREFIX') . "user_online WHERE `ctime` > ".$time;
+    $sql = "SELECT COUNT(*) AS count FROM " . C('DB_PREFIX') . "user_online WHERE `ctime` > '$time'";
     $res = M('')->query($sql);
     return $res[0]['count'];
 }
@@ -2313,13 +2321,13 @@ function getFrom($type, $type_data) {
 		$target = substr($type_data['url'], 0, 1) == '#'  ? '_self' : '_blank';
 		$html = "<a href=\"{$type_data['url']}\" target=\"{$target}\">{$type_data['source']}</a>";
 	}elseif($type==0){
-		$html = '<span>网站</span>';
+		$html = '<a href="###">网站</a>';
 	}elseif($type==1){
-		$html = '<span>手机网页</span>';
+		$html = '<a href="###">手机网页</a>';
 	}elseif ($type==2){
-		$html = '<span>Android客户端</span>';
+		$html = '<a href="###">Android客户端</a>';
 	}elseif ($type==3){
-		$html = '<span>iPhone客户端</span>';
+		$html = '<a href="###">iPhone客户端</a>';
 	}
 	return $html;
 }
@@ -2666,17 +2674,4 @@ function getCnzz($set = true){
 		$ts['cnzz'] = $cnzz;
 	}
 	return $cnzz;
-}
-// uri for iis / apache
-function getRequestUri(){
-	if (isset($_SERVER['REQUEST_URI'])) {
-		$uri = $_SERVER['REQUEST_URI'];
-	} else {
-		if (isset($_SERVER['argv'])) {
-			 $uri = $_SERVER['PHP_SELF'] .'?'. $_SERVER['argv'][0];
-		} else {
-			$uri = $_SERVER['PHP_SELF'] .'?'. $_SERVER['QUERY_STRING'];
-		}
-	}
-	return $uri;
 }

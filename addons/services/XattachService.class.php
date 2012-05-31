@@ -69,7 +69,10 @@ class XattachService extends Service {
 
 		//创建目录
 		mkdir($upload->savePath,0777,true);
-
+		if(C('TS_STORAGE_TYPE')=='SAEST'){
+			$upload->savePath		=	'';
+			$options['custom_path'] =	'';
+		}
 		//执行上传操作
         if(!$upload->upload()) {
 
@@ -94,6 +97,7 @@ class XattachService extends Service {
 					$map['hash']		=	$u['hash'];
 					$map['savepath']	=	$options['custom_path'];
 					$map['savename']	=	$u['savename'];
+					$map['savedomain']	=	$u['savedomain'];
 					$map['uploadTime']	=	time();
 					//$map['savedomain']=	C('ATTACH_SAVE_DOMAIN'); //如果做分布式存储，需要写方法来分配附件的服务器domain
 					$aid		=	$xattach->add($map);
@@ -117,6 +121,7 @@ class XattachService extends Service {
 					$map['hash']		=	$u['hash'];
 					$map['savepath']	=	$options['custom_path'];
 					$map['savename']	=	$u['savename'];
+					$map['savedomain']	=	$u['savedomain'];
 					$map['uploadTime']	=	time();
 					//$map['savedomain']=	C('ATTACH_SAVE_DOMAIN'); //如果做分布式存储，需要写方法来分配附件的服务器domain
 					$map['key']	=	$u['key'];
@@ -212,6 +217,7 @@ class XattachService extends Service {
 			$map['hash']		=	$file['hash'];
 			$map['savepath']	=	$options['custom_path'];
 			$map['savename']	=	$options['save_name'];
+			$map['savedomain']	=	$options['savedomain'];
 			$map['uploadTime']	=	time();
 			//$map['savedomain']=	C('ATTACH_SAVE_DOMAIN'); //如果做分布式存储，需要写方法来分配附件的服务器domain
 			$aid		=	M('Attach')->add($map);

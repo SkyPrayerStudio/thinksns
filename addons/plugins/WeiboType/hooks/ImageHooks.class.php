@@ -119,13 +119,7 @@ class ImageHooks extends AbstractWeiboTypeHooks
             }
 
             $imageInfo = getimagesize($_FILES['pic']['tmp_name']);
-
-            if(function_exists(image_type_to_extension($imageInfo[2],1))){
-                $imageType = strtolower(substr(image_type_to_extension($imageInfo[2]),1));
-            }else{
-                $imageType = strtolower(substr($_FILES['pic']['name'],strrpos($_FILES['pic']['name'],'.')+1));
-            }
-
+            $imageType = strtolower(substr(image_type_to_extension($imageInfo[2]),1));
             if($imageType == "jpeg") $imageType ='jpg';
 
             $config['image']['ext'] = empty($config['image']['ext'])?"jpg;png;jpeg;gif":$config['image']['ext'];
@@ -137,23 +131,39 @@ class ImageHooks extends AbstractWeiboTypeHooks
             }
 
             //执行上传操作
-            $savePath = $this->_getSaveTempPath();
-            $filename = md5( $_FILES['pic']['tmp_name'].$this->mid ).'.'.$imageType;
-            $copyRes  = @copy($_FILES['pic']['tmp_name'], $savePath.'/'.$filename);
-            $moveUploadRes = @move_uploaded_file($_FILES['pic']['tmp_name'], $savePath.'/'.$filename);
-            if($copyRes || $moveUploadRes)
-            {
-                $result['boolen']    = 1;
-                $result['type_data'] = 'temp/'.$filename;
-                $result['file_name'] = $filename;
-                $result['picurl']    = __UPLOAD__.'/temp/'.$filename;
-                 Session::start();
-                $_SESSION['weibo_img_attach'][]= $savePath.'/'.$filename;
-                Session::pause();
-            } else {
-                $result['boolen']    = 0;
-                $result['message']   = L('upload_filed');
-            }
+			if(C('TS_STORAGE_TYPE')=='SAEST'){
+				$temp = X('Xattach')->upload('weibo_temp');
+				if(!$temp['status']){
+					$result['boolen']    = 0;
+					$result['message']   = L('upload_filed');
+				}else{
+					$result['boolen']    = 1;
+					$result['type_data'] = $temp['info'][0]['savename'];
+					$result['file_name'] = $temp['info'][0]['savename'];
+					$result['picurl']    = __UPLOAD__.'/'.$temp['info'][0]['savename'];
+					session_start();
+					$_SESSION['weibo_img_attach'][]= __UPLOAD__.'/'.$temp['info'][0]['savename'];
+					session_write_close();
+				}
+			}else{
+				$savePath = $this->_getSaveTempPath();
+				$filename = md5( $_FILES['pic']['tmp_name'].$this->mid ).'.'.$imageType;
+				$copyRes  = @copy($_FILES['pic']['tmp_name'], $savePath.'/'.$filename);
+				$moveUploadRes = @move_uploaded_file($_FILES['pic']['tmp_name'], $savePath.'/'.$filename);
+				if($copyRes || $moveUploadRes)
+				{
+					$result['boolen']    = 1;
+					$result['type_data'] = 'temp/'.$filename;
+					$result['file_name'] = $filename;
+					$result['picurl']    = __UPLOAD__.'/temp/'.$filename;
+					session_start();
+					$_SESSION['weibo_img_attach'][]= $savePath.'/'.$filename;
+					session_write_close();
+				} else {
+					$result['boolen']    = 0;
+					$result['message']   = L('upload_filed');
+				}
+			}
         }else{
             $result['boolen']    = 0;
             $result['message']   = L('upload_filed');
@@ -164,6 +174,52 @@ class ImageHooks extends AbstractWeiboTypeHooks
 
     private function _publishWeiboTypeData($type_data){
 
+		//使用SAE上传
+		if(C('TS_STORAGE_TYPE')=='SAEST'){
+
+			//原图
+			$bigpic	=	$type_data;
+			$bigpicfile = basename($bigpic);
+			$typedata['picurl']			= $bigpic;
+			//中图
+			$middlepicfile = 'middle_'.$bigpicfile;
+			//小图
+			$smallpicfile = 'small_'.$bigpicfile;
+
+
+			//执行缩图
+			$s = new SaeStorage();
+			$img_data = $s->read(C('TS_STORAGE_DOMAIN'),$bigpicfile);
+
+			$img = new SaeImage();
+			$img->setData( $img_data );
+
+			//输出中图
+			$img->resize(465);
+			$img->improve();
+			$new_data = $img->exec('jpg');
+			if (!$s->write(C('TS_STORAGE_DOMAIN'), $middlepicfile , $new_data)) {
+				$typedata['thumbmiddleurl'] = $bigpic;
+			}else{
+				$typedata['thumbmiddleurl'] = $middlepicfile;
+			}
+
+			//输出小图
+			$img->clean();
+			$img->setData( $img_data );
+			$img->resize(120);
+			$img->improve();
+			$new_data = $img->exec('jpg');
+			if (!$s->write(C('TS_STORAGE_DOMAIN'), $smallpicfile , $new_data)) {
+				$typedata['thumburl'] = $bigpic;
+			}else{
+				$typedata['thumburl'] = $smallpicfile;
+			}
+
+			return $typedata;
+		}
+
+		//非SAE情况
 		if(!file_exists($type_data)){
             $type_data = '/data/uploads/'.$type_data;
         }else{

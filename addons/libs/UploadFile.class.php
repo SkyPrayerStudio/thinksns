@@ -134,49 +134,62 @@ class UploadFile
     private function save($file)
     {
         $filename = $file['savepath'].$file['savename'];
-        if(!$this->uploadReplace && is_file($filename)) {
-            // 不覆盖同名文件
-            $this->error	=	'文件已经存在！'.$filename;
-            return false;
-        }
-        if(!move_uploaded_file($file['tmp_name'], auto_charset($filename,'utf-8','gbk'))) {
-            $this->error = '文件上传保存错误！';
-            return false;
-        }
-        if($this->thumb) {
+
+		//SAE附件存储
+		if(C('TS_STORAGE_TYPE')=='SAEST'){
+
+			$s = new SaeStorage();
+
+			if (!$this->uploadReplace && $s->fileExists(C('TS_STORAGE_DOMAIN'), $filename)) {
+				// 不覆盖同名文件
+				$this->error = '文件已经存在！' . $filename;
+				return false;
+			}
+			//if(!move_uploaded_file($file['tmp_name'], $this->autoCharset($filename,'utf-8','gbk'))) {
+			$saeupload	=	$s->upload(C('TS_STORAGE_DOMAIN'), $filename, $file['tmp_name']);
+			if (!$this->thumbRemoveOrigin && !$saeupload ) {
+					$this->error = $s->errno() == -7 ? 'domain [ ' . C('TS_STORAGE_DOMAIN') . ' ] 不存在！请在SAE控制台的Storage服务中添加一个domain' : 'SAE文件上传保存错误！';
+					return false;
+			}else{
+				$saeinfo = parse_url($saeupload);
+				$this->saveDomain = $saeinfo['host'];
+				$this->saveName   = $saeinfo['path'];
+			}
+
+		//远程FTP附件存储
+		}elseif(C('TS_STORAGE_TYPE')=='FTP'){
+
+		//115网盘附件存储
+		}elseif(C('TS_STORAGE_TYPE')=='115'){
+
+		//本地化附件存储
+		}else{
+
+			if(!$this->uploadReplace && is_file($filename)) {
+				// 不覆盖同名文件
+				$this->error	=	'文件已经存在！'.$filename;
+				return false;
+			}
+
+			if(!move_uploaded_file($file['tmp_name'], auto_charset($filename,'utf-8','gbk'))) {
+				$this->error = '文件上传保存错误！';
+				return false;
+			}
+
+		}
+
+		//TS不自动生成缩略图，由应用自己控制
+        //if($this->thumb) {
             // 生成图像缩略图
-			vendor("yu_image");
-			$img = new yu_image();
+		//	vendor("yu_image");
+		//	$img = new yu_image();
 			// 等比缩放
-			$img->param($filename)->thumb($file['savepath'].$this->thumbFile,$this->thumbMaxWidth,1000,0);
+		//	$img->param($filename)->thumb($file['savepath'].$this->thumbFile,$this->thumbMaxWidth,1000,0);
+        //}
 
-//            import("ORG.Util.Image");
-//            $image =  Image::getImageInfo($filename);
-//			dump($image);
-//            if(false !== $image) {
-//                //是图像文件生成缩略图
-//                $thumbWidth		=	explode(',',$this->thumbMaxWidth);
-//                $thumbHeight		=	explode(',',$this->thumbMaxHeight);
-//                $thumbPrefix		=	explode(',',$this->thumbPrefix);
-//                $thumbSuffix = explode(',',$this->thumbSuffix);
-//                $thumbFile			=	explode(',',$this->thumbFile);
-//                $thumbPath    =  $this->thumbPath?$this->thumbPath:$file['savepath'];
-//                for($i=0,$len=count($thumbWidth); $i<$len; $i++) {
-//                    $thumbname	=	$thumbPath.$thumbPrefix[$i].substr($file['savename'],0,strrpos($file['savename'], '.')).$thumbSuffix[$i].'.'.$file['extension'];
-//                   dump($filename);dump($thumbname);
-//					$xxx = Image::thumb($filename,$thumbname,'',$thumbWidth[$i],$thumbHeight[$i],true);
-//					dump($xxx);
-//                }
-//                if($this->thumbRemoveOrigin) {
-//                    // 生成缩略图之后删除原图
-//                    unlink($filename);
-//                }
-//            }
-        }
-        if($this->zipImags) {
+        //if($this->zipImags) {
             // TODO 对图片压缩包在线解压
-
-        }
+        //}
 
         //由于很多时候，后台不需要水印，所以需要水印的在应用中自己实现，参考如下代码
         //require_cache(SITE_PATH."/addons/libs/WaterMark/WaterMark.class.php");
@@ -200,30 +213,37 @@ class UploadFile
      */
     public function upload($savePath ='')
     {
-		mkdir($savePath,0777,true);
-        //如果不指定保存文件名，则由系统默认
-        if(empty($savePath)) {
-            $savePath = $this->savePath;
-        }
-        // 检查上传目录
-        if(!is_dir($savePath)) {
-            // 检查目录是否编码后的
-            if(is_dir(base64_decode($savePath))) {
-                $savePath	=	base64_decode($savePath);
-            }else{
-                // 尝试创建目录
-                if(!mkdir($savePath,0777,true)){
-                    $this->error  =  '上传目录'.$savePath.'不存在';
-                    return false;
-                }
-            }
-        }else {
-            if(!is_writeable($savePath)) {
-                $this->error  =  '上传目录'.$savePath.'不可写';
-                return false;
-            }
-        }
-        $fileInfo = array();
+		//SAE附件存储
+		if(C('TS_STORAGE_TYPE')=='SAEST'){
+			//[sae] 分析出domain，第一个目录为domain
+			$savePath   = '';
+		}else{
+			mkdir($savePath,0777,true);
+			//如果不指定保存文件名，则由系统默认
+			if(empty($savePath)) {
+				$savePath = $this->savePath;
+			}
+			// 检查上传目录
+			if(!is_dir($savePath)) {
+				// 检查目录是否编码后的
+				if(is_dir(base64_decode($savePath))) {
+					$savePath	=	base64_decode($savePath);
+				}else{
+					// 尝试创建目录
+					if(!mkdir($savePath,0777,true)){
+						$this->error  =  '上传目录'.$savePath.'不存在';
+						return false;
+					}
+				}
+			}else {
+				if(!is_writeable($savePath)) {
+					$this->error  =  '上传目录'.$savePath.'不可写';
+					return false;
+				}
+			}
+		}
+
+		$fileInfo = array();
         $isUpload   = false;
 
         // 获取上传的文件信息
@@ -244,13 +264,17 @@ class UploadFile
                         return false;
                 }
 
-                //保存上传文件
+			   //保存上传文件
                 if(!$this->save($file)) {
                     return false;
                 }
-                if(function_exists($this->hashType)) {
+
+				$file['savedomain'] = $this->saveDomain;
+				//$file['savename']   = $this->saveName;
+				if(function_exists($this->hashType)) {
                     $fun =  $this->hashType;
                     $file['hash']   =  $fun(auto_charset($file['savepath'].$file['savename'],'utf-8','gbk'));
+					if(!$file['hash']) $file['hash']='';
                 }
                 //上传成功后保存文件信息，供其它地方调用
                 unset($file['tmp_name'],$file['error']);
